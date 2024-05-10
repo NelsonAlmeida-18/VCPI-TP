@@ -1,0 +1,13 @@
+Enunciado do trabalho 1 - grupo (2-3 elementos)
+Neste trabalho pretende-se explorar modelos de deep learning aplicados ao dataset GTSRB (dataset alemão de sinais de trânsito) para obter o melhor resultado possível em termos de accuracy no dataset de teste (o melhor resultado publicado é 99.82%).
+O trabalho divide-se em duas partes:
+Numa primeira parte é suposto treinar modelos aplicando "data augmentation", tanto em pré-processamento como dinâmico. Pretende-se nesta primeira parte explorar os filtros e métodos de processamento de imagem e avaliar o impacto dos mesmos no desempenho final da rede. Parte da avaliação será ditada pelo uso das técnicas de processamento de imagem utilizadas.  Devem ser treinadas vários modelos, com "data augmentation" diferentes, e ser realizada uma análise aos resultados obtidos.
+Numa segunda fase é pretendido estudar o potencial de utilizar ensembles de redes. As redes que farão parte do ensemble são as treinadas na primeira fase. 
+Dataset alemão:
+Imagens para treino (ZIP)https://www.di.uminho.pt/~arf/storage/dl/train_images.zip
+Imagens para teste (ZIP)https://www.di.uminho.pt/~arf/storage/dl/test_images.zip
+Para além do notebook (ou scripts python avulsas) pretende-se um pequeno relatório que descreva as opções tomadas e apresente os testes realizados. O notebook ou as scripts também devem ser devidamente comentadas.
+
+Submissão via grupos no blackboard.
+Os trabalhos terão apresentação pública no dia 18 de Junho durante o período da tarde.
+Data final de submissão: 29 de Maio
