@@ -52,7 +52,7 @@ class Transformations():
             img = img.transform(img.size, Image.AFFINE, skewMatrix)
 
         else:
-            img = cv2.warpAffine(img, skewMatrix, (self.imageWidth, self.imageHeight))
+            img = cv2.warpAffine(img, skewMatrix, (self.imageWidth-5, self.imageHeight-5))
 
         return img
     
@@ -191,8 +191,29 @@ class SyntheticDataGeneration():
         self.ImagePath = "./data/German_Templates/"
         signals = os.listdir(self.ImagePath)
 
-        for signal in signals:
+        self.trainingImagesPath = "/Users/rkeat/Desktop/Universidade/1anoMestrado/2semestre/VCPI-TP/Computer Vision/data/train/Final_Training/Images/"
+        trainingImagesPaths = os.listdir(self.trainingImagesPath)
+        
+        #Lets get the number of signals to generate
+        # For this we will consult the number of images in the training dataset for each signal
+        # Then we will get the max number of images and generate the same number of images for each signal + 200 images
+        # This is to ensure that we have enough images for each signal
+        maxImages = 0
+        imagesPerSignal = {}
+        for signal in trainingImagesPaths:
+            if not signal.endswith(".ppm"): continue
 
+            images = os.listdir(f"{self.trainingImagesPath}{signal}")
+            imagesPerSignal[signal] = len(images)
+            if len(images) > maxImages:
+                maxImages = len(images)
+        
+        for signal in imagesPerSignal.keys():
+            imagesPerSignal[signal] = max(0, abs(imagesPerSignal[signal]-maxImages)) + 200
+
+        print(imagesPerSignal)
+        for signal in signals:
+        
             signalImage = Image.open(f"{self.ImagePath}{signal}")
             self.imageWidth, self.imageHeight = signalImage.size
             # signalImage = self.imageTransformer.addPerlinNoise(signalImage)
