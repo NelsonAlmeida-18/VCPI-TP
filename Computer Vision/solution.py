@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import os
 from PIL import Image, ImageEnhance
 
-
+from transformationUtils import *
 
 class Transformations():
     def __init__(self):
@@ -19,7 +19,10 @@ class Transformations():
             "skew": self.skewImage,
             "rotate": self.rotateImage,
             "brightness": self.changeBrightness,
-            "perlin": self.addPerlinNoise
+            "perlin": self.addPerlinNoise,
+            "gaussian": self.addGaussianNoise,
+            "blur": self.addGaussianBlur,
+            "colorspace": self.colorspaceTransform
         }
 
         # Lets get a random number of transformations to apply to the image
@@ -40,7 +43,6 @@ class Transformations():
 
         return brightness
     
-
     def skewImage(self,img):
         # Lets skew the image
         # Lets generate a random skew factor
@@ -69,23 +71,69 @@ class Transformations():
     
 
     def changeBrightness(self,img):
-        # To achieve this we will use a power gamma transformation
-        # The equation for the power gamma transformation is:
-        #  s = c*r^gamma
-
-        # # Lets generate a random gamma
-        # gamma = np.random.uniform(0.04, 25)
-
-        # # Lets apply the transformation
-        # for i in range(self.imageWidth):
-        #     for j in range(self.imageHeight):
-        #         img[i][j] = 255 * (img[i][j] / 255) ** gamma
-        
         if isinstance(img, Image.Image):
             enhancer = ImageEnhance.Brightness(img)
             img = enhancer.enhance(np.random.uniform(0.5, 1.5))
 
         return img
+    
+    def colorspaceTransform(self,img):
+        # In this transformation we will change the color space of the image
+        # We will convert the image to HSL and change the saturation of the image
+        # This aims to simulate the effect of different lighting conditions
+        # Lets generate a random saturation factor
+        saturation = np.random.uniform(0.5, 1.5)
+        if isinstance(img, Image.Image):
+            img = img.convert("HSV")
+            img = img.point(lambda i: i * saturation)
+            img = img.convert("RGB")
+        
+        else:
+        
+            # Lets convert the image to HSL
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
+
+            # Lets change the saturation of the image
+            img[:,:,2] = img[:,:,2] * saturation
+
+            # Lets convert the image back to BGR
+            img = cv2.cvtColor(img, cv2.COLOR_HLS2BGR)
+
+        return img
+    
+    def noiseTransform(self,img):
+        # In this transformation we will add diverse types of noise to the image
+        # For noise types we will use perlin and gaussian noise to simulate imperfections in the image
+        # Lets generate a random noise type
+        noiseType = np.random.choice(["perlin", "gaussian"])
+
+        if noiseType == "perlin":
+            img = self.addPerlinNoise(img)
+        else:
+            img = self.addGaussianNoise(img)
+
+        return img
+    
+    def addGaussianBlur(self,img):
+        # In this transformation we will add bluring to the image
+        # Lets generate a random bluring factor
+        # We will use this to simulate motion blur effects / out of focus images
+        bluringFactor = np.random.randint(1, 5)
+        img = cv2.GaussianBlur(img, (bluringFactor, bluringFactor), 0)
+
+        return img
+    
+
+    
+    def addGaussianNoise(self,img):
+        # In this transformation we will add gaussian noise to the image
+        # Lets generate a random noise factor
+        noiseFactor = np.random.uniform(0, 100)
+        noise = np.random.normal(0, noiseFactor, img.shape)
+        img = img + noise
+
+        return img
+        
     
     # TODO: Add a stochastic parameter to the perlin noise function in order to make the noise diferent
     def addPerlinNoise(self, image):
@@ -186,13 +234,10 @@ class SyntheticDataGeneration():
         
         self.loadImages()
 
+    def imagesPerSignal(self):
         
-    def loadImages(self):
-        self.ImagePath = "./data/German_Templates/"
-        signals = os.listdir(self.ImagePath)
-
-        self.trainingImagesPath = "/Users/rkeat/Desktop/Universidade/1anoMestrado/2semestre/VCPI-TP/Computer Vision/data/train/Final_Training/Images/"
-        trainingImagesPaths = os.listdir(self.trainingImagesPath)
+        trainingImagesPath = "/Users/rkeat/Desktop/Universidade/1anoMestrado/2semestre/VCPI-TP/Computer Vision/data/train/Final_Training/Images/"
+        trainingImagesPaths = os.listdir(trainingImagesPath)
         
         #Lets get the number of signals to generate
         # For this we will consult the number of images in the training dataset for each signal
@@ -201,51 +246,60 @@ class SyntheticDataGeneration():
         maxImages = 0
         imagesPerSignal = {}
         for signal in trainingImagesPaths:
-            if not signal.endswith(".ppm"): continue
+            
+            if not os.path.isdir(f"{trainingImagesPath}{signal}"):
+                continue
 
-            images = os.listdir(f"{self.trainingImagesPath}{signal}")
+            images = os.listdir(f"{trainingImagesPath}{signal}")
             imagesPerSignal[signal] = len(images)
+            
             if len(images) > maxImages:
                 maxImages = len(images)
         
         for signal in imagesPerSignal.keys():
             imagesPerSignal[signal] = max(0, abs(imagesPerSignal[signal]-maxImages)) + 200
 
+        return imagesPerSignal
+
+
+        
+    def loadImages(self):
+        self.ImagePath = "./data/German_Templates/"
+        signals = os.listdir(self.ImagePath)
+
+        imagesPerSignal = self.imagesPerSignal()
         print(imagesPerSignal)
+
         for signal in signals:
-        
-            signalImage = Image.open(f"{self.ImagePath}{signal}")
-            self.imageWidth, self.imageHeight = signalImage.size
-            # signalImage = self.imageTransformer.addPerlinNoise(signalImage)
-            # # # Lets generate a synthetic background for the image
-            # syntheticBackground = self.generateSyntheticBackground(signalImage.size)
+            signalName = signal.split(".")[0]
+            signalName = signalName.split("_")[0]
 
-            # # # Lets apply random transformations to the signal template
-            # # # This transformation in the signal is altering the alpha channel therefore we can merge the image as a png
-            # # # Lets get the alpha channel beforehand 
-            # signalImage = self.transformSignal(signalImage)
+            padding = 5 - len(signalName)
+            signalName = "0"*padding + signalName
+
             
-            # # # mergedImage = self.merge(syntheticBackground, signalImage, alphachannel)
-            # mergedImage = self.merge(syntheticBackground, signalImage)
-            # plt.imshow(mergedImage)
-            # plt.show()
+            # Create a directory to store the images
+            if not os.path.exists(f"./data/SyntheticData/{signalName}"):
+                os.makedirs(f"./data/SyntheticData/{signalName}")
+            
+            if os.path.exists(f"./data/SyntheticData/{signalName}/{signalName}") and len(os.listdir(f"./data/SyntheticData/{signalName}")) > imagesPerSignal[signalName]:
+                continue
+            
+            print(f"Generating {imagesPerSignal[signalName]} images for signal {signal}...")
 
+            for i in range(imagesPerSignal[signalName]):
+                signalImage = Image.open(f"{self.ImagePath}{signal}")
+                self.imageWidth, self.imageHeight = signalImage.size
 
-            signalImage = self.imageTransformer.transformImage(signalImage, self.imageWidth, self.imageHeight)
+                signalImage = self.imageTransformer.transformImage(signalImage, self.imageWidth, self.imageHeight)
 
-            syntheticBg = self.generateSyntheticBackground((self.imageWidth-1, self.imageHeight-1))
-            mergedImage = self.merge(syntheticBg, signalImage)
+                syntheticBg = self.generateSyntheticBackground((self.imageWidth-1, self.imageHeight-1))
+                mergedImage = self.merge(syntheticBg, signalImage)
 
-            mergedImage = mergedImage.resize((28, 28))
-        
-            # plt.imshow(mergedImage)
-            # plt.show()
-                        
-            # Save the result
-            if not os.path.exists("./data/SyntheticData/"):
-                os.makedirs("./data/SyntheticData/")
-            mergedImage.save(f"./data/SyntheticData/{signal}")
+                mergedImage = mergedImage.resize((28, 28))
 
+                mergedImage.save(f"./data/SyntheticData/{signalName}/{signalName}_{i}.ppm")
+                break
     
     # TODO: fix the transformSignal function, the image is not being loaded correctly
     def transformSignal(self, signal):
