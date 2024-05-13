@@ -308,7 +308,8 @@ class SyntheticDataGeneration():
             if not os.path.exists(f"{self.syntheticDataPath}/{signalName}"):
                 os.makedirs(f"{self.syntheticDataPath}/{signalName}")
             
-            if os.path.exists(f"{self.syntheticDataPath}/{signalName}/{signalName}") and len(os.listdir(f"{self.syntheticDataPath}/{signalName}")) > imagesPerSignal[signalName]:
+            if os.path.exists(f"{self.syntheticDataPath}/{signalName}") and len(os.listdir(f"{self.syntheticDataPath}/{signalName}")) > 0:
+                print(f"Synthetic data for signal {signal} already generated, skipping...")
                 continue
             
             print(f"Generating {imagesPerSignal[signalName]} images for signal {signal}...")
