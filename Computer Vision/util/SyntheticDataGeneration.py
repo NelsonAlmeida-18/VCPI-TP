@@ -396,5 +396,3 @@ class SyntheticDataGeneration():
         background = Image.new(mode='RGB', size=image_size, color = (bgColor[0], bgColor[1], bgColor[2]))
 
         return background
-
-SyntheticDataGeneration()

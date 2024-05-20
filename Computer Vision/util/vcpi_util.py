@@ -5,6 +5,13 @@ import pandas as pd
 import seaborn as sn
 from sklearn.metrics import confusion_matrix
 
+import torch
+import torchvision
+import os
+import datetime
+import time
+from tqdm import tqdm
+
 
 
 def show_history_plus(history, fields):
@@ -202,4 +209,193 @@ def plot_predictions(images, predictions, ground_truth, classes, num_rows= 5, nu
     plt.tight_layout()
     plt.show()
 
+def build_confusion_matrix(model, dataset, test_set, device):
 
+    preds = []
+    ground_truth = []
+
+    for images, targets in dataset:
+
+        predictions = model(images.to(device))
+        preds_sparse = [np.argmax(x) for x in predictions.cpu().detach().numpy()]
+        preds.extend(preds_sparse)
+        ground_truth.extend(targets.numpy())
+
+    show_confusion_matrix(ground_truth, preds, len(test_set.classes))      
+
+    # De forma a estabilizar os resultados, quando a accuracy não melhora ao fim de x épocas, atualizamos a taxa de aprendizagem para uma mais baixa
+# Ao pararmos quando piora/não melhora convém guardarmos a iteração anterior visto esta ser a melhor
+def train(device, model, training_data,  data_loader, val_sub, val_sub_loader, epochs, loss_fn, optimizer, scheduler, early_stopping, save_prefix="model", path_name = ""):
+
+    if "models" not in os.listdir():
+      os.mkdir("models")
+
+    #Lets create the path to save the model  
+    if path_name not in os.listdir("models"):
+      date = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
+      if path_name == "": path_name = f"model_{date}"
+      os.mkdir(f"models/{path_name}")
+
+    #Lets create the logs file
+    logfile = open(f"models/{path_name}/logs_{path_name}.txt", "a")
+
+    model.train()
+
+    history = {}
+    history['accuracy'] = []
+    history['val_accuracy'] = []
+    history['val_loss'] = []
+    history['loss'] = []
+    best_val_loss = np.inf
+
+    start_time = time.time()
+    stop_time = time.time()
+    accuracy = 0
+    val_loss = 0
+    val_accuracy = 0
+
+
+
+    for epoch in tqdm(range(epochs), desc=f"Epoch: {epoch:03d}; Acc = {accuracy:0.4f}; Val_loss = {val_loss}; Vall_acc: {val_accuracy}; Time: {(stop_time-start_time):0.4f}"):
+        # O droput durante o treino deita fora alguns neurónios, durante a avaliação usa sempre os neurónios todos
+        # Batch normalization durante o treino usa a média e o desvio padrão da batch que recebeu, mas durante a avaliação usa a média que vai calculando durante o treino
+        #  Todos os outros layers são iguais durante o treino e avaliação
+        model.train()
+        start_time = time.time()
+        correct = 0
+        running_loss = 0
+
+        for i, (inputs,targets) in enumerate(data_loader,0):
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            outputs = model(inputs)
+
+            loss = loss_fn(outputs, targets)
+            optimizer.zero_grad()
+
+            loss.backward()
+            optimizer.step()
+
+            _,pred = torch.max(outputs, 1)
+            correct += (pred == targets).sum()
+            running_loss += loss
+
+        
+        model.eval()
+        t_correct = 0
+        val_loss = 0
+        # torch.no_grad() é usado para desativar o cálculo do gradiente, o que acelera o processo e reduz a memória
+        with torch.no_grad():
+            for i,t in val_sub_loader:
+                i = i.to(device)
+                t = t.to(device)
+                o = model(i)
+                _,p = torch.max(o, 1)
+                t_correct += (t == p).sum()
+
+                # Loss entre os targets e os outputs
+                val_loss += loss_fn(o,t)
+
+        old_lr = optimizer.param_groups[0]['lr']
+        scheduler.step(val_loss)
+        new_lr = optimizer.param_groups[0]['lr']
+
+        if old_lr != new_lr:
+            #print(f'==> Learning rate changed from {old_lr} to {new_lr}')
+            #Lets write the changes to the log file
+            logtime = datetime.datetime.now().strftime("%H_%M_%S")
+            logfile.write(f"[{logtime}] -> Learning rate changed from {old_lr} to {new_lr} in {epoch} epoch\n")
+        
+
+        stop_time = time.time()
+        accuracy = 100 * correct/len(training_data)
+        val_accuracy = 100*t_correct/len(val_sub)
+        
+        #print(f'Epoch: {epoch:03d}; Acc = {accuracy:0.4f}; Val_loss = {val_loss}; Vall_acc: {val_accuracy}; Time: {(stop_time- start_time):0.4f}')
+        history["val_accuracy"].append(val_accuracy.cpu().numpy())
+        history['accuracy'].append(accuracy.cpu().numpy())
+        history['loss'].append(running_loss.cpu().detach().numpy())
+        
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save({
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "accuracy": accuracy,
+                "val_accuracy": val_accuracy,
+                "loss": running_loss,
+                "val_loss": val_loss,
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict()
+                },
+                f"models/{path_name}/{save_prefix}_{epoch}.pth"
+            )
+            #print("==> Model saved")
+            #Lets write to the log file
+            logtime = datetime.datetime.now().strftime("%H_%M_%S")
+            logfile.write(f"[{logtime}] -> Model saved with name {save_prefix}_{epoch} in {epoch} epoch with validation loss={val_loss}\n")
+        
+        if early_stopping(val_loss):
+            #print("==> Early stopping")
+            #Lets write to the log file
+            logtime = datetime.datetime.now().strftime("%H_%M_%S")
+            logfile.write(f"[{logtime}] -> Training stopped early with {val_loss} validation loss in epoch {epoch}\n")
+            break
+
+    #Lets write to the log file
+    logtime = datetime.datetime.now().strftime("%H_%M_%S")
+    logfile.write(f"[{logtime}] -> Training finished with {val_loss} loss {accuracy} accuracy with training data and {val_accuracy} accuracy in the validation data in epoch {epoch}\n")
+    endtime = time.time()
+    time_elapsed = endtime - start_time
+    print(f"==> Training finished in {time_elapsed} minutes")
+    print(f"Training stats: {accuracy} accuracy | {val_accuracy} validation accuracy | {val_loss} loss")
+    return(history)
+
+def evaluate(model, data_loader, device):
+
+    # sets the model in evaluation mode.
+    # although our model does not have layers which behave differently during training and evaluation
+    # this is a good practice as the models architecture may change in the future
+    model.eval()
+
+    correct = 0
+    
+    for _, (images, targets) in enumerate(data_loader):
+         
+        # forward pass, compute the output of the model for the current batch
+        outputs = model(images.to(device))
+
+        # "max" returns a namedtuple (values, indices) where values is the maximum 
+        # value of each row of the input tensor in the given dimension dim; 
+        # indices is the index location of each maximum value found (argmax).
+        # the argmax effectively provides the predicted class number        
+        _, preds = torch.max(outputs, dim=1)
+
+        correct += (preds.cpu() == targets).sum()
+
+    return (correct / len(data_loader.dataset)).item()
+
+
+class Early_Stopping():
+
+    def __init__(self, patience=3, min_delta=0.000001):
+        self.patience = patience
+        self.min_delta = min_delta
+
+        self.min_loss = np.inf
+        self.counter = 0
+
+    def __call__(self, loss):
+        if (loss+self.min_delta < self.min_loss):
+            self.min_loss = loss
+            self.counter = 0
+
+        else:
+            self.counter += 1
+            if self.counter > self.patience:
+                return True
+
+        return False
+    
