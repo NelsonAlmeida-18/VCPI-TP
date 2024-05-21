@@ -51,7 +51,7 @@ class Conv_I(torch.nn.Module):
         x = torch.flatten(x,1) # (bs, 48, 5 ,5 -> (bs,1200))
         x = self.fc1(x) # (bs, 1200) -> (bs, 10)
 
-        return(x)
+        return x
     
 
 class Conv_II(torch.nn.Module):
@@ -106,6 +106,93 @@ class Conv_II(torch.nn.Module):
         x = self.d1(x)
         x = self.relu_d1(x)
         x = self.dp3(x)
+        x = self.fc2(x)
+        
+        return x
+    
+
+class ConvIII(torch.nn.Module):
+    def __init__(self, num_classes, img_size):
+        super().__init__()
+        #Lets do a simple Convolutional Neural Network with a kernel of 3x3
+        self.conv1 = torch.nn.Conv2d(3, img_size, 3)
+        self.bn1 = torch.nn.BatchNorm2d(img_size)
+        self.relu1 = torch.nn.ReLU()
+
+        self.conv2 = torch.nn.Conv2d(img_size, img_size, 3)
+        self.bn2 = torch.nn.BatchNorm2d(img_size)
+        self.relu2 = torch.nn.ReLU()
+
+        
+        #With a 2x2 kernel
+        self.maxpool1 = torch.nn.MaxPool2d(2) #Output size = img_size/2 ->16x16
+        #Node dropouts
+        self.dropout1 = torch.nn.Dropout(0.25)
+
+        self.conv3 = torch.nn.Conv2d(img_size, img_size, 3)
+        self.bn3 = torch.nn.BatchNorm2d(img_size)
+        self.relu3 = torch.nn.ReLU()
+
+        self.conv4 = torch.nn.Conv2d(img_size, img_size, 3)
+        self.bn4 = torch.nn.BatchNorm2d(img_size)
+        self.relu4 = torch.nn.ReLU()
+
+        #max pooling
+        self.maxpool2 = torch.nn.MaxPool2d(2) #output size = img_size/4 -> 8x8
+        #dropout
+        self.dropout2 = torch.nn.Dropout(0.25)
+        #Another convolutional layer
+        self.conv5 = torch.nn.Conv2d(img_size/4, img_size/4, 3)
+        self.bn5 = torch.nn.BatchNorm2d(img_size/4)
+        self.relu5 = torch.nn.ReLU()
+
+        #
+        self.maxpool3 = torch.nn.MaxPool2d(2) #output size = img_size/8 -> 4x4
+        self.dropout3 = torch.nn.Dropout(0.25)
+
+        #Fully connected layer
+        self.fc1 = torch.nn.Linear(img_size*4*4, 512)
+        self.relu_fc1 = torch.nn.ReLU()
+        #Batch normalization
+        self.bn6 = torch.nn.BatchNorm1d(512)
+        #fully connected layer
+        self.fc2 = torch.nn.Linear(512, num_classes)
+        #self.softmax = torch.nn.Softmax(dim=1)
+    
+    def forward(self, x):
+        #input = (bs, 1, 32, 32)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+
+        x = self.maxpool1(x)
+        x = self.dropout1(x)
+
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.relu3(x)
+
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = self.relu4(x)
+
+        x = self.maxpool2(x)
+        x = self.dropout2(x)
+
+        x = self.conv5(x)
+        x = self.bn5(x)
+        x = self.relu5(x)
+
+        x = self.maxpool3(x)
+        x = self.dropout3(x)
+        
+        x = self.fc1(x)
+        x = self.relu_fc1(x)
+        x = self.bn6(x)
         x = self.fc2(x)
         
         return x
