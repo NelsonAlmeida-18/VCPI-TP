@@ -399,3 +399,19 @@ class Early_Stopping():
 
         return False
     
+
+
+class TrainAndEval():
+    def __init__(self, model, training_data, val_data, test_data, device, loss_fn, optimizer, scheduler, early_stopping, epochs, save_prefix, path_name):
+        self.model = model
+        self.training_data = training_data
+        self.val_data = val_data
+        self.test_data = test_data
+        self.device = device
+        self.loss_fn = loss_fn
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.early_stopping = early_stopping
+        self.epochs = epochs
+        self.save_prefix = save_prefix
+        self.path_name = path_name
