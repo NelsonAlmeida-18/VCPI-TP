@@ -225,135 +225,101 @@ def build_confusion_matrix(model, dataset, test_set, device):
 
     # De forma a estabilizar os resultados, quando a accuracy não melhora ao fim de x épocas, atualizamos a taxa de aprendizagem para uma mais baixa
 # Ao pararmos quando piora/não melhora convém guardarmos a iteração anterior visto esta ser a melhor
-def train(device, model, training_data,  data_loader, val_sub, val_sub_loader, epochs, loss_fn, optimizer, scheduler, early_stopping, save_prefix="model", path_name = ""):
 
-    if "models" not in os.listdir():
-      os.mkdir("models")
+def train(model, train_loader, val_loader, epochs, loss_fn, optimizer,
+           scheduler, early_stopper, device, save_prefix = 'model'):
 
-    #Lets create the path to save the model  
-    if path_name not in os.listdir("models"):
-      date = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-      if path_name == "": path_name = f"model_{date}"
-      os.mkdir(f"models/{path_name}")
-
-    #Lets create the logs file
-    logfile = open(f"models/{path_name}/logs_{path_name}.txt", "a")
-
-    model.train()
+    if not os.path.exists('models'):
+        os.makedirs('models')
+    
+    if not os.path.exists(f'models/{save_prefix}'):
+        os.makedirs(f'models/{save_prefix}')
 
     history = {}
     history['accuracy'] = []
-    history['val_accuracy'] = []
+    history['val_acc'] = []
     history['val_loss'] = []
     history['loss'] = []
     best_val_loss = np.inf
 
-    start_time = time.time()
-    stop_time = time.time()
-    accuracy = 0
-    val_loss = 0
-    val_accuracy = 0
+    for epoch in range(epochs):  # loop over the dataset multiple times
 
-
-
-    for epoch in tqdm(range(epochs), desc=f"Epoch: {epoch:03d}; Acc = {accuracy:0.4f}; Val_loss = {val_loss}; Vall_acc: {val_accuracy}; Time: {(stop_time-start_time):0.4f}"):
-        # O droput durante o treino deita fora alguns neurónios, durante a avaliação usa sempre os neurónios todos
-        # Batch normalization durante o treino usa a média e o desvio padrão da batch que recebeu, mas durante a avaliação usa a média que vai calculando durante o treino
-        #  Todos os outros layers são iguais durante o treino e avaliação
         model.train()
-        start_time = time.time()
+        start_time = time.time() 
         correct = 0
-        running_loss = 0
-
-        for i, (inputs,targets) in enumerate(data_loader,0):
+        running_loss = 0.0
+        for i, (inputs, targets) in enumerate(train_loader, 0):
+            
             inputs = inputs.to(device)
             targets = targets.to(device)
 
             outputs = model(inputs)
+            _, predicted = torch.max(outputs, 1)
 
             loss = loss_fn(outputs, targets)
+            
             optimizer.zero_grad()
-
             loss.backward()
             optimizer.step()
 
-            _,pred = torch.max(outputs, 1)
-            correct += (pred == targets).sum()
             running_loss += loss
+            correct += (predicted == targets).sum()
 
-        
         model.eval()
-        t_correct = 0
-        val_loss = 0
-        # torch.no_grad() é usado para desativar o cálculo do gradiente, o que acelera o processo e reduz a memória
+        v_correct = 0
+        val_loss = 0.0
         with torch.no_grad():
-            for i,t in val_sub_loader:
+            for i,t in val_loader:
                 i = i.to(device)
                 t = t.to(device)
                 o = model(i)
-                _,p = torch.max(o, 1)
-                t_correct += (t == p).sum()
+                _,p = torch.max(o,1)
+                
+                #with torch.no_grad():
+                val_loss += loss_fn(o, t)
 
-                # Loss entre os targets e os outputs
-                val_loss += loss_fn(o,t)
+                v_correct += (p == t).sum()
 
         old_lr = optimizer.param_groups[0]['lr']
         scheduler.step(val_loss)
         new_lr = optimizer.param_groups[0]['lr']
-
+        
         if old_lr != new_lr:
-            #print(f'==> Learning rate changed from {old_lr} to {new_lr}')
-            #Lets write the changes to the log file
-            logtime = datetime.datetime.now().strftime("%H_%M_%S")
-            logfile.write(f"[{logtime}] -> Learning rate changed from {old_lr} to {new_lr} in {epoch} epoch\n")
-        
+            print('==> Learning rate updated: ', old_lr, ' -> ', new_lr)
 
+        epoch_loss = running_loss / len(train_loader.dataset)
+        accuracy = 100 * correct / len(train_loader.dataset)
+        v_accuracy = 100 * v_correct / len(val_loader.dataset)
+        val_loss = val_loss / len(val_loader.dataset)
         stop_time = time.time()
-        accuracy = 100 * correct/len(training_data)
-        val_accuracy = 100*t_correct/len(val_sub)
-        
-        #print(f'Epoch: {epoch:03d}; Acc = {accuracy:0.4f}; Val_loss = {val_loss}; Vall_acc: {val_accuracy}; Time: {(stop_time- start_time):0.4f}')
-        history["val_accuracy"].append(val_accuracy.cpu().numpy())
+        print(f'Epoch: {epoch:03d}; Loss: {epoch_loss:0.6f}; Accuracy: {accuracy:0.4f}; Val Loss: {val_loss:0.6f}; Val Acc: {v_accuracy:0.4f}; Elapsed time: {(stop_time - start_time):0.4f}')
         history['accuracy'].append(accuracy.cpu().numpy())
-        history['loss'].append(running_loss.cpu().detach().numpy())
-        
-
-        if val_loss < best_val_loss:
+        history['val_acc'].append(v_accuracy.cpu().numpy())
+        history['val_loss'].append(val_loss.cpu().detach().numpy())
+        history['loss'].append(epoch_loss.cpu().detach().numpy())
+ 
+        ###### Saving ######
+        if val_loss < best_val_loss :
             best_val_loss = val_loss
             torch.save({
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "accuracy": accuracy,
-                "val_accuracy": val_accuracy,
-                "loss": running_loss,
-                "val_loss": val_loss,
-                "optimizer": optimizer.state_dict(),
-                "scheduler": scheduler.state_dict()
+                'epoch': epoch,
+                'model':model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'history': history,
                 },
-                f"models/{path_name}/{save_prefix}_{epoch}.pth"
-            )
-            #print("==> Model saved")
-            #Lets write to the log file
-            logtime = datetime.datetime.now().strftime("%H_%M_%S")
-            logfile.write(f"[{logtime}] -> Model saved with name {save_prefix}_{epoch} in {epoch} epoch with validation loss={val_loss}\n")
-        
-        if early_stopping(val_loss):
-            #print("==> Early stopping")
-            #Lets write to the log file
-            logtime = datetime.datetime.now().strftime("%H_%M_%S")
-            logfile.write(f"[{logtime}] -> Training stopped early with {val_loss} validation loss in epoch {epoch}\n")
-            break
+                f'models/{save_prefix}.pt')
 
-    #Lets write to the log file
-    logtime = datetime.datetime.now().strftime("%H_%M_%S")
-    logfile.write(f"[{logtime}] -> Training finished with {val_loss} loss {accuracy} accuracy with training data and {val_accuracy} accuracy in the validation data in epoch {epoch}\n")
-    endtime = time.time()
-    time_elapsed = endtime - start_time
-    print(f"==> Training finished in {time_elapsed} minutes")
-    print(f"Training stats: {accuracy} accuracy | {val_accuracy} validation accuracy | {val_loss} loss")
+        if early_stopper(val_loss):
+            print('Early stopping!')
+            break
+        
+    print('Finished Training')
+
     return(history)
 
-def evaluate(model, data_loader, device):
+
+def evaluate(model, data_loader):
 
     # sets the model in evaluation mode.
     # although our model does not have layers which behave differently during training and evaluation
@@ -362,7 +328,7 @@ def evaluate(model, data_loader, device):
 
     correct = 0
     
-    for _, (images, targets) in enumerate(data_loader):
+    for i, (images, targets) in enumerate(data_loader):
          
         # forward pass, compute the output of the model for the current batch
         outputs = model(images.to(device))
@@ -376,6 +342,40 @@ def evaluate(model, data_loader, device):
         correct += (preds.cpu() == targets).sum()
 
     return (correct / len(data_loader.dataset)).item()
+
+
+
+def show_bad_preds(model, dataset, classes, device, batch_size, test_set):
+    k = 0
+    iters = 0
+
+    preds = []
+    ground_truth = []
+    imgs = torch.Tensor(15, 3, 32,32)
+
+    iterator = iter(dataset)
+
+    max_iters = test_set.__len__() / batch_size
+    while k < 15 and iters < max_iters:
+
+        images, targets = next(iterator)
+        #print(images[0].shape)
+        logits = model(images.to(device))
+        
+        #print(predictions[0])
+        predictions = torch.nn.functional.softmax(logits, dim=1).cpu().detach().numpy()
+        for i in range(len(predictions)):
+
+            if np.argmax(predictions[i]) != targets[i] and k < 15:
+
+                preds.append(predictions[i])
+                ground_truth.append(targets[i])
+                imgs[k, :, :, :] = images[i]
+                k += 1
+
+        iters += 1
+
+    plot_predictions(imgs, preds, ground_truth, classes, 5, 3)
 
 
 class Early_Stopping():
@@ -399,19 +399,16 @@ class Early_Stopping():
 
         return False
     
-
-
-class TrainAndEval():
-    def __init__(self, model, training_data, val_data, test_data, device, loss_fn, optimizer, scheduler, early_stopping, epochs, save_prefix, path_name):
-        self.model = model
-        self.training_data = training_data
-        self.val_data = val_data
-        self.test_data = test_data
-        self.device = device
-        self.loss_fn = loss_fn
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.early_stopping = early_stopping
-        self.epochs = epochs
-        self.save_prefix = save_prefix
-        self.path_name = path_name
+class TransfDataset(torch.utils.data.Dataset):
+    def __init__(self, subset, transform=None):
+        self.subset = subset
+        self.transform = transform
+        
+    def __getitem__(self, index):
+        x, y = self.subset[index]
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+        
+    def __len__(self):
+        return len(self.subset)

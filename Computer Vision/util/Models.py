@@ -1,10 +1,16 @@
 import torch
 from torchinfo import summary
+import torch
+from torch.utils.data import Dataset
+import torchvision
+from torchvision.transforms import v2
 
-class Conv_I(torch.nn.Module):
+import torchinfo
+
+
+class Conv(torch.nn.Module):
 
     def __init__(self, num_classes):
-
         super().__init__()
         self.conv1 = torch.nn.Conv2d(3, 16, 3)
         self.bn1 = torch.nn.BatchNorm2d(16)
@@ -15,6 +21,7 @@ class Conv_I(torch.nn.Module):
         self.relu2 = torch.nn.ReLU()
 
         self.maxpool1 = torch.nn.MaxPool2d(2)
+
 
         self.conv3 = torch.nn.Conv2d(32, 48, 3)
         self.bn3 = torch.nn.BatchNorm2d(48)
@@ -27,32 +34,33 @@ class Conv_I(torch.nn.Module):
         self.maxpool2 = torch.nn.MaxPool2d(2)
 
         self.fc1 = torch.nn.Linear(1200, num_classes)
+        
 
-    def forward(self, x):
-
-        #input = (bs, 1, 32, 32)
-        x = self.conv1(x) # -> (bs, 16, 30, 30)
+    def forward(self, x):    
+        
+        # input = (bs, 3, 32, 32)
+        x = self.conv1(x) # -> (bs, 16, 26, 26)
         x = self.bn1(x)
         x = self.relu1(x)
-        x = self.conv2(x) # -> (bs, 32, 28, 28)
+        x = self.conv2(x) # -> (bs, 32, 24, 24)
         x = self.bn2(x)
         x = self.relu2(x)
-
-        x = self.maxpool1(x) # -> (bs, 32, 14, 14)
-
+        x = self.maxpool1(x)
+        
         x = self.conv3(x) # -> (bs, 48, 12, 12)
         x = self.bn3(x)
         x = self.relu3(x)
         x = self.conv4(x) # -> (bs, 48, 10, 10)
         x = self.bn4(x)
         x = self.relu4(x)
-        x = self.maxpool2(x) # -> (bs, 48, 5, 5)
+        x = self.maxpool2(x)
+        
+        x = torch.flatten(x,1) # -> (bs, 48 * 5 * 5 = 1200)
+        x = self.fc1(x)        # -> (bs, 10)
 
-        x = torch.flatten(x,1) # (bs, 48, 5 ,5 -> (bs,1200))
-        x = self.fc1(x) # (bs, 1200) -> (bs, 10)
+        return(x)
 
-        return x
-    
+
 
 class Conv_II(torch.nn.Module):
     def __init__(self, num_classes):
