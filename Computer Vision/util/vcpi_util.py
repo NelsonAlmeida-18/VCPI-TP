@@ -319,7 +319,7 @@ def train(model, train_loader, val_loader, epochs, loss_fn, optimizer,
     return(history)
 
 
-def evaluate(model, data_loader):
+def evaluate(model, data_loader, device):
 
     # sets the model in evaluation mode.
     # although our model does not have layers which behave differently during training and evaluation
